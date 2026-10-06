@@ -1,0 +1,16 @@
+name: Check
+on:
+  push:
+  pull_request:
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Lua 5.1
+        run: sudo apt-get update && sudo apt-get install -y lua5.1
+      - name: Validate Lua and installer
+        run: |
+          lua5.1 -e "assert(loadfile('external_lua/entry.lua')); assert(loadfile('external_lua/custom_quickbuy/quickbuy.lua'))"
+          lua5.1 tests/smoke.lua
+          python -m py_compile install.py
