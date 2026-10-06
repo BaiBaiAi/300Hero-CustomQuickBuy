@@ -30,6 +30,8 @@
 
 Windows 安装器 EXE 可通过 `python build_exe.py` 构建，输出位于 `dist/300Hero-QuickBuy-Installer.exe`。双击后选择游戏目录，点击“安装并验证”，再进入对局测试。EXE 包含本项目的 Lua 脚本和 JMP 安装逻辑；安装前请退出游戏。
 
+EXE 中的“卸载并备份”会恢复安装前的 JMP 记录，把本项目脚本、角色配置和安装备份移到游戏目录旁边的 `300Hero_quickbuy_uninstall/<时间戳>/`。命令行也可运行 `python install.py "F:\JumpGame\300Hero" --uninstall`。卸载前同样需要退出游戏。
+
 如果游戏更新后校验失败，请更新本项目的版本适配后再安装；不要把旧版本清单 XML 覆盖到新客户端。
 
 ## 工作原理与边界

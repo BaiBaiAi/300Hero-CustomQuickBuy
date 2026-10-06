@@ -14,7 +14,7 @@ def main() -> None:
     root = tk.Tk()
     root.title("300Hero 自定义快捷购买安装器")
     root.resizable(False, False)
-    root.geometry("530x175")
+    root.geometry("530x185")
 
     folder = tk.StringVar(value=r"F:\JumpGame\300Hero")
     tk.Label(root, text="游戏目录（包含 Data*.jmp）").pack(anchor="w", padx=15, pady=(15, 4))
@@ -28,7 +28,7 @@ def main() -> None:
             folder.set(selected)
 
     tk.Button(path_row, text="浏览", command=browse).pack(side="left", padx=(8, 0))
-    result = tk.StringVar(value="选择游戏目录后点击“安装并验证”。")
+    result = tk.StringVar(value="选择游戏目录后，可安装、卸载或查看状态。")
     tk.Label(root, textvariable=result, anchor="w", wraplength=500).pack(fill="x", padx=15, pady=10)
 
     def game_dir() -> Path:
@@ -57,10 +57,25 @@ def main() -> None:
             result.set("安装失败，游戏目录未完成更新。")
             messagebox.showerror("安装失败", str(exc))
 
+    def uninstall() -> None:
+        try:
+            target = game_dir()
+            archive = install.uninstall(target)
+            if archive:
+                result.set("卸载完成：原始 JMP 已恢复，快捷购买脚本已移出游戏目录。")
+                messagebox.showinfo("卸载完成", f"已卸载快捷购买。\n配置和备份保存于：{archive}")
+            else:
+                result.set("当前没有已部署的快捷购买脚本。")
+                messagebox.showinfo("卸载状态", result.get())
+        except (OSError, ValueError, bootstrap.BootstrapError) as exc:
+            result.set("卸载失败。请检查游戏是否已关闭及备份是否完整。")
+            messagebox.showerror("卸载失败", str(exc))
+
     actions = tk.Frame(root)
     actions.pack(pady=4)
     tk.Button(actions, text="查看状态", width=15, command=status).pack(side="left", padx=6)
     tk.Button(actions, text="安装并验证", width=15, command=deploy).pack(side="left", padx=6)
+    tk.Button(actions, text="卸载并备份", width=15, command=uninstall).pack(side="left", padx=6)
     root.mainloop()
 
 

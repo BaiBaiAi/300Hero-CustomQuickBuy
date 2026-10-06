@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import os
 import shutil
 import subprocess
+import zlib
 from datetime import datetime
 from pathlib import Path
 
@@ -20,7 +22,7 @@ def require_closed_game() -> None:
         capture_output=True, text=True, check=True,
     )
     if any(line.startswith('"300.exe"') for line in result.stdout.splitlines()):
-        raise bootstrap.BootstrapError("300.exe is running; close the game before installation")
+        raise bootstrap.BootstrapError("300.exe is running; close the game before installing or uninstalling")
 
 
 def deploy(game: Path) -> None:
@@ -76,10 +78,71 @@ def deploy(game: Path) -> None:
     print("Hero configurations and last_hero.txt were preserved.")
 
 
+def uninstall(game: Path) -> Path | None:
+    """Restore the original JMP and move this add-on outside the game folder."""
+    require_closed_game()
+    entry = game / "external_lua" / "entry.lua"
+    addon = game / "external_lua" / "custom_quickbuy"
+    resource = bootstrap.locate(game)
+    current = bootstrap.read_resource(resource)
+    backups = game / "custom_quickbuy_backups"
+    owned_entry = entry.exists() and b"__CQB_STARTED" in entry.read_bytes()
+    if bootstrap.MARKER in current and entry.exists() and not owned_entry:
+        raise bootstrap.BootstrapError("external_lua/entry.lua is not this project's script")
+    if bootstrap.MARKER not in current and not owned_entry and not addon.exists() and not backups.exists():
+        return None
+    candidates = sorted(backups.glob("*/setup_jmp.json"))
+    original_backup = None
+    for candidate in candidates:
+        data = json.loads(candidate.read_text(encoding="utf-8"))
+        if Path(data["pack"]).resolve() != resource.pack.resolve():
+            continue
+        original = zlib.decompress(bytes.fromhex(data["compressed"]))
+        if hashlib.md5(original).hexdigest() != data["source_md5"]:
+            raise bootstrap.BootstrapError(f"Invalid JMP backup: {candidate}")
+        if bootstrap.MARKER in current and bootstrap.patch_source(original) != current:
+            continue
+        original_backup = candidate
+        break
+
+    if bootstrap.MARKER in current:
+        if original_backup is None:
+            raise bootstrap.BootstrapError("No matching original JMP backup; refusing to overwrite the client")
+        bootstrap.restore(original_backup)
+
+    archive = game.parent / f"{game.name}_quickbuy_uninstall" / datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    archive.mkdir(parents=True, exist_ok=False)
+    for source, relative in ((addon, Path("external_lua/custom_quickbuy")),
+                             (backups, Path("custom_quickbuy_backups"))):
+        if source.exists():
+            destination = archive / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(source), str(destination))
+    if owned_entry:
+        destination = archive / "external_lua" / "entry.lua"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(entry), str(destination))
+
+    if original_backup is not None:
+        first_backup = archive / "custom_quickbuy_backups" / original_backup.parent.name
+        for name, destination in (("entry.lua", entry),
+                                  ("quickbuy.lua", addon / "quickbuy.lua"),
+                                  ("dark.bmp", addon / "dark.bmp")):
+            source = first_backup / name
+            if source.exists():
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, destination)
+    external = game / "external_lua"
+    if external.is_dir() and not any(external.iterdir()):
+        external.rmdir()
+    return archive
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="300Hero custom quick-buy installer")
     parser.add_argument("game_dir", type=Path, help="directory containing Data*.jmp")
     parser.add_argument("--status", action="store_true", help="inspect bootstrap without writing")
+    parser.add_argument("--uninstall", action="store_true", help="restore JMP and remove this add-on")
     parser.add_argument("--restore-jmp", type=Path, metavar="BACKUP",
                         help="restore setup_jmp.json from a previous installation")
     args = parser.parse_args()
@@ -93,6 +156,9 @@ def main() -> None:
             print(f"{resource.pack.name} #{resource.index}: MD5 "
                   f"{hashlib.md5(source).hexdigest()}, "
                   f"quick-buy bootstrap {'installed' if bootstrap.MARKER in source else 'absent'}")
+        elif args.uninstall:
+            archive = uninstall(game)
+            print(f"Uninstalled; backup: {archive}" if archive else "Already uninstalled")
         elif args.restore_jmp:
             require_closed_game()
             bootstrap.restore(args.restore_jmp.resolve())
