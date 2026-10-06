@@ -5,3 +5,7 @@ external_lua/custom_quickbuy/last_hero.txt
 external_lua/custom_quickbuy/*.tmp
 __pycache__/
 .pytest_cache/
+build/
+dist/
+*.spec
+local_backups/

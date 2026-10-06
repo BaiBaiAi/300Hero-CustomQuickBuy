@@ -28,6 +28,8 @@
 
 查看引导状态：`python install.py "F:\JumpGame\300Hero" --status`。恢复 JMP：`python install.py "F:\JumpGame\300Hero" --restore-jmp "<备份目录>\setup_jmp.json"`。恢复入口和脚本时使用同一备份目录中的文件。
 
+Windows 安装器 EXE 可通过 `python build_exe.py` 构建，输出位于 `dist/300Hero-QuickBuy-Installer.exe`。双击后选择游戏目录，点击“安装并验证”，再进入对局测试。EXE 包含本项目的 Lua 脚本和 JMP 安装逻辑；安装前请退出游戏。
+
 如果游戏更新后校验失败，请更新本项目的版本适配后再安装；不要把旧版本清单 XML 覆盖到新客户端。
 
 ## 工作原理与边界
