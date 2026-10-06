@@ -6,6 +6,7 @@ local slots, ids, prices, owned = {}, {}, {}, {}
 local money, queued, need, drag, portraitId
 local lastReconcile = 0
 local installed = {}
+local drag_sources = setmetatable({}, { __mode = "k" })
 
 local function valid_id(value)
     local n = tonumber(value)
@@ -179,6 +180,38 @@ local function install_drag_hooks()
     end)
 end
 
+-- The game's shop disables XE_DRAG in some recommendation/CEF modes.
+-- Attach a handler to its existing item controls so the normal drag ghost
+-- can still be used for the custom bar.
+local function install_market_sources()
+    local controls = upvalue(InitMain_MarketC, "market_equip")
+    local icons = upvalue(InitMain_MarketC, "market_icon")
+    local goods = upvalue(InitMain_MarketC, "Market_goods")
+    if not controls or not icons or not goods or not goods.Id then return end
+    local attached = 0
+    for index, control in pairs(controls) do
+        if control and (not drag_sources[control] or drag_sources[control] ~= control.script[XE_DRAG]) then
+            local original = control.script[XE_DRAG]
+            local row = index
+            local handler = function()
+                local active = upvalue(InitMain_MarketC, "Market_goods") or goods
+                local item = active.Id and valid_id(active.Id[row])
+                if item and type(Market_pullPicbyUstID) == "function" then
+                    local picture = active.strPictureName and active.strPictureName[row]
+                    local ok, err = pcall(Market_pullPicbyUstID, picture or "", item, icons[row], row, 1)
+                    if ok then M.log("商城开始拖动装备 " .. item) return end
+                    M.log("商城拖动失败: " .. tostring(err))
+                end
+                if type(original) == "function" then return original() end
+            end
+            control.script[XE_DRAG] = handler
+            drag_sources[control] = handler
+            attached = attached + 1
+        end
+    end
+    if attached > 0 then M.log("商城拖动入口已接管 " .. attached .. " 个控件") end
+end
+
 local function install_gold_hooks()
     wrap("FightBag_ReciveMoney", "money", function(original, value, ...)
         money = tonumber(value)
@@ -272,14 +305,17 @@ function M.refresh()
         local slot, id = slots[i], ids[i]
         if slot then
             pcall(function()
-                slot:SetVisible(id and 1 or 0)
+                slot:SetVisible(1)
+                if slot.icon then slot.icon:SetVisible(id and 1 or 0) end
                 if id then
                     slot:SetImageTipWithItemId(id)
                     if type(XGetIconPathByItemID) == "function" then
                         local path = XGetIconPathByItemID(id)
-                        if path and path ~= "" then slot.changeimage(path) end
+                        if path and path ~= "" and slot.icon then slot.icon.changeimage(path) end
                     end
                     if slot.dark then slot.dark:SetVisible(owned[id] and 1 or 0) end
+                elseif slot.dark then
+                    slot.dark:SetVisible(0)
                 end
             end)
         end
@@ -289,19 +325,25 @@ end
 
 local function create_bar()
     local parent = upvalue(InitMain_Fightbag, "EquipArea")
-    if not parent or not hero or type(CreateWindow) ~= "function" then return end
+    if not parent or not hero or type(CreateWindow) ~= "function" or not n_fightbag_ui then return end
+    local visible, is_open = pcall(function() return n_fightbag_ui:IsVisible() end)
+    if not visible or (is_open ~= true and is_open ~= 1) then return end
     if area == parent and bar then return end
     area, nextbuy, gold_label, bar = parent, nil, nil, nil
     local ok, result = pcall(CreateWindow, parent.id, 10, -55, 326, 59)
     if not ok or not result then return end
     bar = result
+    bar:SetVisible(1)
     slots = {}
     for i = 1, 6 do
         local index = i
-        local slot = bar:AddImage("", (i - 1) * 44, 10, 40, 40)
+        local slot = bar:AddImage((path_fight or "../Data/UINEW/FIGHT/") .. "Me_equip.BMP", (i - 1) * 44, 10, 40, 40)
         if slot then
             slot:SetTouchEnabled(1)
             if type(DisableRButtonClick) == "function" then pcall(DisableRButtonClick, slot.id) end
+            local icon = slot:AddImage("", 0, 0, 40, 40)
+            if icon then icon:SetTouchEnabled(0) icon:SetVisible(0) end
+            slot.icon = icon
             local frame = slot:AddImage((path_lolfight or "../Data/UINEW/FIGHT/") .. "farshop_side.BMP", -1, -1, 42, 42)
             if frame then frame:SetTouchEnabled(0) end
             local dark = slot:AddImage(BASE .. "dark.bmp", 0, 0, 40, 40)
@@ -321,6 +363,10 @@ local function create_bar()
     end
     M.refresh()
     reconcile()
+    if slots[1] then
+        local good, x, y = pcall(function() return slots[1]:GetPosition() end)
+        if good then M.log("首槽坐标: " .. tostring(x) .. "," .. tostring(y) .. " map=" .. tostring(map)) end
+    end
     notify("六格快捷购买栏已加载")
 end
 
@@ -336,6 +382,7 @@ function M.tick()
     end
     if not current or current == 0 or current == 1 then return end
     install_drag_hooks()
+    install_market_sources()
     install_gold_hooks()
     install_price_hook()
     install_reconcile_hooks()

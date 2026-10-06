@@ -23,6 +23,13 @@ local function widget(x, y, w, h)
 end
 local EquipArea = widget(0, 0, 400, 130)
 function InitMain_Fightbag() return EquipArea end
+n_fightbag_ui = widget(0, 0, 868, 150)
+local bag_open = false
+function n_fightbag_ui:IsVisible() return bag_open end
+local market_equip = {widget(0, 0, 167, 50)}
+local market_icon = {widget(0, 0, 38, 38)}
+local Market_goods = {Id = {21159}, strPictureName = {"icon.bmp"}}
+function InitMain_MarketC() return market_equip, market_icon, Market_goods end
 local latest_bar
 CreateWindow = function(_, x, y, w, h)
     latest_bar = widget(x, y, w, h)
@@ -45,10 +52,17 @@ ClearData_EquipNextBuy = function() end
 FarShop_ReciveEquip = function() end
 SendData_MarketGoods = function() end
 __EXTLUA_CUR_HERO = 101
+os.remove("external_lua/custom_quickbuy/heroes/101.txt")
 
 local app = assert(loadfile("external_lua/custom_quickbuy/quickbuy.lua"))()
 app.tick()
-Market_pullPicbyUstID("icon", 21159, {}, 1, 1)
+assert(latest_bar == nil)
+bag_open = true
+app.tick()
+assert(latest_bar and #latest_bar.children == 6)
+assert(latest_bar.children[1].visible == 1)
+assert(latest_bar.children[1].children[1].visible == 0)
+market_equip[1].script[XE_DRAG]()
 Market_pullPicXLUP(1)
 local saved = assert(io.open("external_lua/custom_quickbuy/heroes/101.txt", "r"))
 assert(saved:read("*l") == "1=21159")
