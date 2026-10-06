@@ -1,37 +1,106 @@
-"""Install the independent quick-buy entry into an already bootstrapped 300Hero."""
+"""Install quick-buy files and this project's version-locked JMP bootstrap."""
 from __future__ import annotations
 
 import argparse
+import hashlib
+import os
 import shutil
+import subprocess
 from datetime import datetime
 from pathlib import Path
 
+import bootstrap
+
+
+def require_closed_game() -> None:
+    if os.name != "nt":
+        return
+    result = subprocess.run(
+        ["tasklist", "/FI", "IMAGENAME eq 300.exe", "/FO", "CSV", "/NH"],
+        capture_output=True, text=True, check=True,
+    )
+    if any(line.startswith('"300.exe"') for line in result.stdout.splitlines()):
+        raise bootstrap.BootstrapError("300.exe is running; close the game before installation")
+
+
+def deploy(game: Path) -> None:
+    require_closed_game()
+    # Validate the client and all source files before writing to the game.
+    resource, _, _ = bootstrap.plan(game)
+    source_dir = Path(__file__).resolve().parent / "external_lua"
+    entry_bytes = (source_dir / "entry.lua").read_bytes()
+    addon_source = source_dir / "custom_quickbuy"
+    lua_bytes = (addon_source / "quickbuy.lua").read_text(encoding="utf-8").encode("gbk")
+    image_bytes = (addon_source / "dark.bmp").read_bytes()
+
+    target_dir = game / "external_lua"
+    addon_target = target_dir / "custom_quickbuy"
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    backup_dir = game / "custom_quickbuy_backups" / stamp
+    backup_dir.mkdir(parents=True, exist_ok=False)
+    addon_target.mkdir(parents=True, exist_ok=True)
+    (addon_target / "heroes").mkdir(exist_ok=True)
+
+    outputs = {
+        target_dir / "entry.lua": entry_bytes,
+        addon_target / "quickbuy.lua": lua_bytes,
+        addon_target / "dark.bmp": image_bytes,
+    }
+    originals: dict[Path, Path | None] = {}
+    for target in outputs:
+        saved = backup_dir / target.name if target.exists() else None
+        if saved:
+            shutil.copy2(target, saved)
+        originals[target] = saved
+    try:
+        for target, content in outputs.items():
+            target.write_bytes(content)
+        boot_status = bootstrap.install(game, backup_dir)
+        for target, content in outputs.items():
+            if target.read_bytes() != content:
+                raise bootstrap.BootstrapError(f"File verification failed: {target}")
+        if bootstrap.MARKER not in bootstrap.read_resource(bootstrap.locate(game)):
+            raise bootstrap.BootstrapError("JMP bootstrap marker missing after installation")
+    except Exception:
+        for target, saved in originals.items():
+            if saved:
+                shutil.copy2(saved, target)
+            elif target.exists():
+                target.unlink()
+        raise
+    print(f"Client setup.lua: {resource.pack.name} #{resource.index}")
+    print(f"Original MD5: {bootstrap.SUPPORTED_MD5}")
+    print(f"JMP bootstrap: {boot_status}")
+    print(f"Quick-buy files: {addon_target}")
+    print(f"Backup directory: {backup_dir}")
+    print("Hero configurations and last_hero.txt were preserved.")
+
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Install 300Hero custom quick buy")
-    parser.add_argument("game_dir", type=Path, help="300Hero root directory")
+    parser = argparse.ArgumentParser(description="300Hero custom quick-buy installer")
+    parser.add_argument("game_dir", type=Path, help="directory containing Data*.jmp")
+    parser.add_argument("--status", action="store_true", help="inspect bootstrap without writing")
+    parser.add_argument("--restore-jmp", type=Path, metavar="BACKUP",
+                        help="restore setup_jmp.json from a previous installation")
     args = parser.parse_args()
     game = args.game_dir.resolve()
     if not game.is_dir():
         parser.error(f"Game directory does not exist: {game}")
-    target = game / "external_lua"
-    target.mkdir(exist_ok=True)
-    source = Path(__file__).resolve().parent / "external_lua"
-    old_entry = target / "entry.lua"
-    if old_entry.exists():
-        stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        backup = target / f"entry.before_custom_quickbuy.{stamp}.lua"
-        shutil.copy2(old_entry, backup)
-        print(f"Previous entry backed up: {backup}")
-    shutil.copy2(source / "entry.lua", old_entry)
-    addon = target / "custom_quickbuy"
-    addon.mkdir(exist_ok=True)
-    (addon / "heroes").mkdir(exist_ok=True)
-    script = (source / "custom_quickbuy" / "quickbuy.lua").read_text(encoding="utf-8")
-    (addon / "quickbuy.lua").write_bytes(script.encode("gbk"))
-    shutil.copy2(source / "custom_quickbuy" / "dark.bmp", addon / "dark.bmp")
-    print(f"Installed to: {target}")
-    print("Close the game before installation; restart it to load the new entry.")
+    try:
+        if args.status:
+            resource = bootstrap.locate(game)
+            source = bootstrap.read_resource(resource)
+            print(f"{resource.pack.name} #{resource.index}: MD5 "
+                  f"{hashlib.md5(source).hexdigest()}, "
+                  f"quick-buy bootstrap {'installed' if bootstrap.MARKER in source else 'absent'}")
+        elif args.restore_jmp:
+            require_closed_game()
+            bootstrap.restore(args.restore_jmp.resolve())
+            print("JMP bootstrap restored from backup")
+        else:
+            deploy(game)
+    except (OSError, ValueError, bootstrap.BootstrapError) as exc:
+        parser.exit(1, f"Installation failed: {exc}\n")
 
 
 if __name__ == "__main__":

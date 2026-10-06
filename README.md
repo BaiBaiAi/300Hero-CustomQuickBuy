@@ -15,17 +15,19 @@
 
 ## 安装
 
-前提：客户端已安装原项目的 `external_lua` 启动引导，且能在游戏启动时执行 `external_lua/entry.lua`。本项目不包含客户端版本相关的 JMP 引导补丁。
+本项目自带当前客户端版本的 JMP 启动引导。安装器按完整资源路径扫描游戏目录下的所有 `Data*.jmp`，只修改 `..\data\script\gamehall\setup\setup.lua`，不会修改 PVE 或 tiyan 路径。安装前会校验原资源 MD5；客户端更新后若版本不匹配，安装器会停止。
 
 1. 关闭游戏。
-2. 在本项目目录运行 `python install.py "C:\\300\\JumpGame\\300Hero"`，按实际游戏目录修改路径。
+2. 在本项目目录运行 `python install.py "F:\JumpGame\300Hero"`，按实际游戏目录修改路径。
 3. 启动游戏，选择英雄并进入对局。首次进入角色的六格为空，将商城装备拖入槽位配置。
 
-安装器会先备份已有 `external_lua/entry.lua`，然后部署本项目的独立入口。原项目其他自动化功能不会随这个独立入口启动；需要恢复时，把 `entry.before_custom_quickbuy.*.lua` 复制回 `entry.lua`。角色配置文件不会被安装器覆盖。
+安装器备份原入口、脚本和 JMP 资源记录到游戏目录的 `custom_quickbuy_backups/<时间戳>/`，然后部署本项目的独立入口和 JMP 引导。原项目其他自动化功能不会随这个独立入口启动。角色配置文件和上次角色 ID 不会被安装器覆盖。
 
 仓库中的 Lua 源码使用 UTF-8；安装器会将界面通知文本转换为游戏所用的 GBK 编码。
 
-如果游戏更新后 `external_lua` 引导失效，先按原项目的安装说明恢复引导，再运行本项目安装器。请勿把旧版本清单 XML 直接覆盖到新客户端。
+查看引导状态：`python install.py "F:\JumpGame\300Hero" --status`。恢复 JMP：`python install.py "F:\JumpGame\300Hero" --restore-jmp "<备份目录>\setup_jmp.json"`。恢复入口和脚本时使用同一备份目录中的文件。
+
+如果游戏更新后校验失败，请更新本项目的版本适配后再安装；不要把旧版本清单 XML 覆盖到新客户端。
 
 ## 工作原理与边界
 
@@ -42,6 +44,7 @@
 ```powershell
 lua.exe -e "assert(loadfile('external_lua/entry.lua')); assert(loadfile('external_lua/custom_quickbuy/quickbuy.lua'))"
 python -m py_compile install.py
+python -m unittest discover -s tests -p "test_*.py"
 ```
 
 实际 UI 拖放、购买和通知需要在游戏客户端内验证，建议先用训练对局测试。
