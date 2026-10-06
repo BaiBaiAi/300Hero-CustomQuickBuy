@@ -40,7 +40,8 @@ CreateWindow = function(_, x, y, w, h)
     return latest_bar
 end
 XGetMapId = function() return 2 end
-XGetHeroNameByID = function(id) return id == 101 and "test" or nil end
+XGetHeroNameByID = function(id) return (id == 101 or id == 102) and "test" or nil end
+SetGameStart_CurrentHeroId = function() end
 XGetCursorPosX = function() return cursor_x end
 XGetCursorPosY = function() return cursor_y end
 XGetIconPathByItemID = function(id) return tostring(id) .. ".bmp" end
@@ -58,6 +59,7 @@ FarShop_ReciveEquip = function() end
 SendData_MarketGoods = function() end
 __EXTLUA_CUR_HERO = 101
 os.remove("external_lua/custom_quickbuy/heroes/101.txt")
+os.remove("external_lua/custom_quickbuy/last_hero.txt")
 
 local app = assert(loadfile("external_lua/custom_quickbuy/quickbuy.lua"))()
 app.tick()
@@ -81,7 +83,11 @@ local saved_single = assert(io.open("external_lua/custom_quickbuy/heroes/101.txt
 local configuration = saved_single:read("*a")
 saved_single:close()
 assert(configuration:find("7=21159", 1, true))
+local saved_hero = assert(io.open("external_lua/custom_quickbuy/last_hero.txt", "r"))
+assert(saved_hero:read("*l") == "101")
+saved_hero:close()
 cursor_x, cursor_y = 20, -30
+__EXTLUA_CUR_HERO = nil -- process restart directly into match, no selection callback
 local restored = assert(loadfile("external_lua/custom_quickbuy/quickbuy.lua"))()
 restored.tick()
 assert(EquipArea.children[2].tip == 21159)
@@ -107,4 +113,8 @@ assert(#bought == 1)
 FightBag_ReciveMoney("3500")
 nextbuy.script[XE_LBUP]()
 assert(#bought == 2 and bought[2][1] == 21057 and bought[2][2] == 1)
+SetGameStart_CurrentHeroId(102)
+local changed_hero = assert(io.open("external_lua/custom_quickbuy/last_hero.txt", "r"))
+assert(changed_hero:read("*l") == "102")
+changed_hero:close()
 print("smoke tests passed")

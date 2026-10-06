@@ -36,6 +36,32 @@ local function config_path(id)
     return BASE .. "heroes/" .. tostring(id) .. ".txt"
 end
 
+local function remember_hero(id)
+    local path = BASE .. "last_hero.txt"
+    local temporary = path .. ".tmp"
+    local f = io.open(temporary, "w")
+    if not f then M.log("无法保存当前角色 ID") return end
+    f:write(tostring(id), "\n")
+    f:close()
+    local backup = path .. ".bak"
+    os.remove(backup)
+    local current = io.open(path, "r")
+    if current then current:close() os.rename(path, backup) end
+    local ok, err = os.rename(temporary, path)
+    if ok then os.remove(backup) else
+        os.rename(backup, path)
+        M.log("保存当前角色 ID 失败: " .. tostring(err))
+    end
+end
+
+local function previous_hero()
+    local f = io.open(BASE .. "last_hero.txt", "r")
+    if not f then return nil end
+    local id = valid_id(f:read("*l"))
+    f:close()
+    return id
+end
+
 local function load_hero(id)
     ids = {}
     local f = io.open(config_path(id), "r")
@@ -74,14 +100,19 @@ local function save_hero()
     return ok
 end
 
-local function set_hero(raw)
+local function set_hero(raw, resumed)
     local id = valid_id(raw)
-    if not id or id == hero then return end
+    if not id then return end
+    if id == hero then
+        if not resumed then remember_hero(id) end
+        return
+    end
     if type(XGetHeroNameByID) == "function" then
         local ok, name = pcall(XGetHeroNameByID, id)
         if not ok or not name or name == "" or name == "?" then return end
     end
     load_hero(id)
+    if not resumed then remember_hero(id) end
 end
 
 function M.set_slot(index, item)
@@ -350,7 +381,7 @@ local function create_bar()
     if not visible or (is_open ~= true and is_open ~= 1) then return end
     if area == parent and bar then create_single_slot(parent) return end
     area, nextbuy, gold_label, bar = parent, nil, nil, nil
-    local ok, result = pcall(CreateWindow, parent.id, 10, -55, 326, 59)
+    local ok, result = pcall(CreateWindow, parent.id, 8, -55, 326, 59)
     if not ok or not result then return end
     bar = result
     bar:SetVisible(1)
@@ -390,7 +421,16 @@ end
 
 function M.tick()
     install_hero_hooks()
-    if not hero then set_hero(__EXTLUA_CUR_HERO) end
+    if not hero then
+        if __EXTLUA_CUR_HERO then set_hero(__EXTLUA_CUR_HERO) end
+        if not hero then
+            local saved = previous_hero()
+            if saved then
+                set_hero(saved, true)
+                if hero then M.log("重连恢复上次角色 ID=" .. saved) end
+            end
+        end
+    end
     local current = type(XGetMapId) == "function" and tonumber(XGetMapId()) or nil
     if current ~= map then
         map = current
