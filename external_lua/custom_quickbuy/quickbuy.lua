@@ -503,6 +503,7 @@ function M.tick()
     end
     local current = type(XGetMapId) == "function" and tonumber(XGetMapId()) or nil
     if current ~= map then
+        M.log("地图状态变化: " .. tostring(map) .. " -> " .. tostring(current))
         map = current
         area, bar, nextbuy, gold_label, drag = nil, nil, nil, nil, nil
         money, queued, need, names, owned = nil, nil, nil, {}, {}

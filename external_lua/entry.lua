@@ -15,12 +15,16 @@ local function run()
     if not good then app.log("tick: " .. tostring(failure)) end
 end
 if g_setup_ui then
-    local timer = g_setup_ui:SetTimer(0, 1000)
-    timer.Timer = function() run() end
-    local key_timer = g_setup_ui:SetTimer(1, 50)
-    key_timer.Timer = function()
+    local timer = g_setup_ui:SetTimer(0, 100)
+    local ticks = 0
+    timer.Timer = function()
         local good, failure = pcall(app.poll_hotkey)
         if not good then app.log("hotkey: " .. tostring(failure)) end
+        ticks = ticks + 1
+        if ticks >= 10 then ticks = 0 run() end
     end
+    app.log("主定时器已启动")
+else
+    app.log("未找到 g_setup_ui，等待入口再次加载")
 end
 run()
