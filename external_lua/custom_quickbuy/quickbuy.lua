@@ -2,7 +2,7 @@
 local M = {}
 local BASE = "external_lua/custom_quickbuy/"
 local hero, map, bar, area, nextbuy
-local slots, ids, prices, owned = {}, {}, {}, {}
+local slots, ids, names, owned = {}, {}, {}, {}
 local money, queued, need, drag, portraitId
 local lastReconcile = 0
 local installed = {}
@@ -43,10 +43,11 @@ local function load_hero(id)
         for line in f:lines() do
             local slot, item = line:match("^(%d+)%s*=%s*(%d+)%s*$")
             slot, item = tonumber(slot), valid_id(item)
-            if slot and slot >= 1 and slot <= 6 then ids[slot] = item end
+            if slot and slot >= 1 and slot <= 7 then ids[slot] = item end
         end
         f:close()
     end
+    if not ids[7] then ids[7] = 27829 end
     hero = id
     M.refresh()
     notify("角色 " .. id .. " 的装备配置已读取")
@@ -57,7 +58,7 @@ local function save_hero()
     local path, tmp = config_path(hero), config_path(hero) .. ".tmp"
     local f = io.open(tmp, "w")
     if not f then M.log("cannot write " .. tmp) return false end
-    for i = 1, 6 do f:write(i, "=", ids[i] or 0, "\n") end
+    for i = 1, 7 do f:write(i, "=", ids[i] or 0, "\n") end
     f:close()
     local backup = path .. ".bak"
     os.remove(backup)
@@ -86,14 +87,14 @@ end
 function M.set_slot(index, item)
     index = tonumber(index)
     item = valid_id(item)
-    if not hero or not index or index ~= math.floor(index) or index < 1 or index > 6 or not item then
+    if not hero or not index or index ~= math.floor(index) or index < 1 or index > 7 or not item then
         return false
     end
     local previous = ids[index]
     ids[index] = item
     if not save_hero() then ids[index] = previous return false end
     M.refresh()
-    notify("第 " .. index .. " 格设置为装备 " .. item)
+    notify((index == 7 and "单购槽" or "第 " .. index .. " 格") .. "已设置为" .. (names[item] or ("装备 " .. item)))
     return true
 end
 
@@ -120,7 +121,7 @@ local function buy(item)
     end)
     if not ok then notify("购买失败: " .. tostring(err)) return false end
     if type(XClickPlaySound) == "function" then pcall(XClickPlaySound, UI_click_new) end
-    notify("已发送装备 " .. item .. " 的购买请求")
+    notify("已尝试购买" .. (names[item] or ("编号 " .. item .. " 的")) .. "装备")
     return true
 end
 
@@ -135,7 +136,7 @@ end
 local function dropped_slot()
     if type(XGetCursorPosX) ~= "function" or type(XGetCursorPosY) ~= "function" then return nil end
     local x, y = XGetCursorPosX(), XGetCursorPosY()
-    for i = 1, 6 do if contains(slots[i], x, y) then return i end end
+    for i = 1, 7 do if contains(slots[i], x, y) then return i end end
 end
 
 local function wrap(name, key, callback)
@@ -197,6 +198,7 @@ local function install_market_sources()
                 local active = upvalue(InitMain_MarketC, "Market_goods") or goods
                 local item = active.Id and valid_id(active.Id[row])
                 if item and type(Market_pullPicbyUstID) == "function" then
+                    if active.strName and active.strName[row] then names[item] = tostring(active.strName[row]) end
                     local picture = active.strPictureName and active.strPictureName[row]
                     local ok, err = pcall(Market_pullPicbyUstID, picture or "", item, icons[row], row, 1)
                     if ok then M.log("商城开始拖动装备 " .. item) return end
@@ -240,29 +242,16 @@ local function install_gold_hooks()
     end)
 end
 
-local function install_price_hook()
-    wrap("SendData_MarketGoods", "prices", function(original, name, p1, p2, p3, price, id, ...)
+local function install_name_hook()
+    wrap("SendData_MarketGoods", "names", function(original, name, p1, p2, p3, price, id, ...)
         local key = valid_id(id)
-        if key and tonumber(price) then
-            prices[key] = tonumber(price)
-            M.refresh_gold()
-        end
+        if key and name and name ~= "" then names[key] = tostring(name) end
         return original(name, p1, p2, p3, price, id, ...)
     end)
 end
 
 local gold_label
 function M.refresh_gold()
-    for i = 1, 6 do
-        local slot, item = slots[i], ids[i]
-        if slot and slot.price then
-            local remaining = item and prices[item] and money and math.max(0, prices[item] - money) or nil
-            pcall(function()
-                slot.price:SetVisible(remaining and remaining > 0 and 1 or 0)
-                slot.price:SetFontText(remaining and remaining > 0 and tostring(remaining) or "", 0xe3e38d)
-            end)
-        end
-    end
     if nextbuy and not gold_label then
         pcall(function()
             gold_label = nextbuy:AddFont("", 13, 8, 0, -37, 36, 15, 0xe3e38d)
@@ -301,7 +290,7 @@ local function install_reconcile_hooks()
 end
 
 function M.refresh()
-    for i = 1, 6 do
+    for i = 1, 7 do
         local slot, id = slots[i], ids[i]
         if slot then
             pcall(function()
@@ -313,7 +302,7 @@ function M.refresh()
                         local path = XGetIconPathByItemID(id)
                         if path and path ~= "" and slot.icon then slot.icon.changeimage(path) end
                     end
-                    if slot.dark then slot.dark:SetVisible(owned[id] and 1 or 0) end
+                    if slot.dark then slot.dark:SetVisible(i <= 6 and owned[id] and 1 or 0) end
                 elseif slot.dark then
                     slot.dark:SetVisible(0)
                 end
@@ -323,12 +312,43 @@ function M.refresh()
     M.refresh_gold()
 end
 
+local function create_single_slot(parent)
+    if slots[7] then return end
+    local ok, slot = pcall(function()
+        return parent:AddImageMultiple("", "", "", 273, 22, 36, 36)
+    end)
+    if not ok or not slot then M.log("单购槽创建失败") return end
+    slot:SetTouchEnabled(1)
+    if type(DisableRButtonClick) == "function" then pcall(DisableRButtonClick, slot.id) end
+    local icon = slot:AddImage("", 1, 1, 34, 34)
+    if icon then
+        icon:SetTouchEnabled(0)
+        local frame = icon:AddImage((path_lolfight or "../Data/UINEW/FIGHT/") .. "farshop_side.BMP", -1, -1, 36, 36)
+        if frame then frame:SetTouchEnabled(0) end
+    end
+    slot.icon = icon
+    local caption = slot:AddFont("P", 11, 8, -3, -22, 12, 12, 0xe3e38d)
+    if caption then caption:SetTouchEnabled(0) end
+    slot.script[XE_LBUP] = function()
+        local id = ids[7]
+        if not id then return end
+        if id == 27829 and money and money < 145 then
+            notify("金币不足，传送卷轴需要 145 金币")
+            return
+        end
+        buy(id)
+    end
+    slots[7] = slot
+    M.refresh()
+    M.log("单购槽已加载，装备=" .. tostring(ids[7]))
+end
+
 local function create_bar()
     local parent = upvalue(InitMain_Fightbag, "EquipArea")
     if not parent or not hero or type(CreateWindow) ~= "function" or not n_fightbag_ui then return end
     local visible, is_open = pcall(function() return n_fightbag_ui:IsVisible() end)
     if not visible or (is_open ~= true and is_open ~= 1) then return end
-    if area == parent and bar then return end
+    if area == parent and bar then create_single_slot(parent) return end
     area, nextbuy, gold_label, bar = parent, nil, nil, nil
     local ok, result = pcall(CreateWindow, parent.id, 10, -55, 326, 59)
     if not ok or not result then return end
@@ -349,9 +369,6 @@ local function create_bar()
             local dark = slot:AddImage(BASE .. "dark.bmp", 0, 0, 40, 40)
             if dark then dark:SetTouchEnabled(0) dark:SetVisible(0) end
             slot.dark = dark
-            local price = slot:AddFont("", 12, 8, 0, -37, 40, 15, 0xe3e38d)
-            if price then price:SetTouchEnabled(0) price:SetVisible(0) end
-            slot.price = price
             slot.script[XE_LBUP] = function()
                 local id = ids[index]
                 if not id then return end
@@ -361,6 +378,7 @@ local function create_bar()
             slots[i] = slot
         end
     end
+    create_single_slot(parent)
     M.refresh()
     reconcile()
     if slots[1] then
@@ -377,14 +395,14 @@ function M.tick()
     if current ~= map then
         map = current
         area, bar, nextbuy, gold_label, drag = nil, nil, nil, nil, nil
-        money, queued, need, prices, owned = nil, nil, nil, {}, {}
+        money, queued, need, names, owned = nil, nil, nil, {}, {}
         slots = {}
     end
     if not current or current == 0 or current == 1 then return end
     install_drag_hooks()
     install_market_sources()
     install_gold_hooks()
-    install_price_hook()
+    install_name_hook()
     install_reconcile_hooks()
     create_bar()
     if os.time() - lastReconcile >= 10 then lastReconcile = os.time() reconcile() end

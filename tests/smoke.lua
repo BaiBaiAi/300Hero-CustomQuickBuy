@@ -2,6 +2,7 @@
 XE_LBUP, XE_DRAG = 1, 2
 UI_click_new = 1
 local bought = {}
+local notices = {}
 local cursor_x, cursor_y = 20, -30
 local function widget(x, y, w, h)
     local self = { x = x, y = y, w = w, h = h, script = {}, children = {}, id = 1 }
@@ -9,6 +10,9 @@ local function widget(x, y, w, h)
         local child = widget(self.x + dx, self.y + dy, ww, hh)
         self.children[#self.children + 1] = child
         return child
+    end
+    function self:AddImageMultiple(_, _, _, dx, dy, ww, hh)
+        return self:AddImage("", dx, dy, ww, hh)
     end
     function self:AddFont() return widget(self.x, self.y, 40, 15) end
     function self:GetPosition() return self.x, self.y end
@@ -43,6 +47,7 @@ XGetIconPathByItemID = function(id) return tostring(id) .. ".bmp" end
 XGetPlayerCharItem = function() return nil end
 XClickMarketGoods = function(id, count) bought[#bought + 1] = { id, count } end
 XClickMarketBuyAndSell = function(flag) assert(flag == 1) end
+XShowSystemInfoFormLua = function(value) notices[#notices + 1] = value end
 Market_pullPicbyUstID = function() end
 Market_pullPicXLUP = function() error("custom drop reached original handler") end
 FightBag_ReciveMoney = function() end
@@ -62,13 +67,24 @@ app.tick()
 assert(latest_bar and #latest_bar.children == 6)
 assert(latest_bar.children[1].visible == 1)
 assert(latest_bar.children[1].children[1].visible == 0)
+assert(#EquipArea.children == 1 and EquipArea.children[1].tip == 27829)
 market_equip[1].script[XE_DRAG]()
 Market_pullPicXLUP(1)
 local saved = assert(io.open("external_lua/custom_quickbuy/heroes/101.txt", "r"))
 assert(saved:read("*l") == "1=21159")
 saved:close()
+cursor_x, cursor_y = 280, 35
+market_equip[1].script[XE_DRAG]()
+Market_pullPicXLUP(1)
+assert(EquipArea.children[1].tip == 21159)
+local saved_single = assert(io.open("external_lua/custom_quickbuy/heroes/101.txt", "r"))
+local configuration = saved_single:read("*a")
+saved_single:close()
+assert(configuration:find("7=21159", 1, true))
+cursor_x, cursor_y = 20, -30
 local restored = assert(loadfile("external_lua/custom_quickbuy/quickbuy.lua"))()
 restored.tick()
+assert(EquipArea.children[2].tip == 21159)
 local copy = assert(io.open("external_lua/custom_quickbuy/heroes/101.txt", "r"))
 assert(copy:read("*l") == "1=21159")
 copy:close()
@@ -77,8 +93,10 @@ SendData_MarketGoods("item", "", "", "", "3000", 21159)
 FightBag_ReciveMoney("1000")
 assert(latest_bar ~= nil)
 assert(restored.set_slot(1, 21159))
+assert(latest_bar.children[1].price == nil)
 latest_bar.children[1].script[XE_LBUP]()
 assert(#bought == 1 and bought[1][1] == 21159 and bought[1][2] == 1)
+assert(notices[#notices]:find("已尝试购买item装备", 1, true))
 Market_pullPicbyUstID("icon", 21159, {}, 1, 1)
 Market_pullPicXLUP(1)
 assert(#bought == 1)
