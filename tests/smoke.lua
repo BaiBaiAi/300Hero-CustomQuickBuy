@@ -1,5 +1,5 @@
 -- Run from the project root with Lua 5.1.
-XE_LBUP, XE_DRAG = 1, 2
+XE_LBUP, XE_DRAG, XE_RBUP = 1, 2, 5
 UI_click_new = 1
 local bought = {}
 local notices = {}
@@ -8,6 +8,7 @@ local function widget(x, y, w, h)
     local self = { x = x, y = y, w = w, h = h, script = {}, children = {}, id = 1 }
     function self:AddImage(_, dx, dy, ww, hh)
         local child = widget(self.x + dx, self.y + dy, ww, hh)
+        child.parent = self
         self.children[#self.children + 1] = child
         return child
     end
@@ -16,6 +17,10 @@ local function widget(x, y, w, h)
     end
     function self:AddFont() return widget(self.x, self.y, 40, 15) end
     function self:GetPosition() return self.x, self.y end
+    function self:SetPosition(x, y)
+        self.x = (self.parent and self.parent.x or 0) + x
+        self.y = (self.parent and self.parent.y or 0) + y
+    end
     function self:GetWH() return self.w, self.h end
     function self:SetTouchEnabled() end
     function self:SetVisible(value) self.visible = value end
@@ -30,6 +35,11 @@ function InitMain_Fightbag() return EquipArea end
 n_fightbag_ui = widget(0, 0, 868, 150)
 local bag_open = false
 function n_fightbag_ui:IsVisible() return bag_open end
+local market_open = false
+GetMarketIsVisible = function() return market_open and 1 or 0 end
+SetMarketIsVisible = function(value) market_open = value == 1 end
+local o_down = false
+XIsKeyDown = function(key) assert(key == 0x4F) return o_down end
 local market_equip = {widget(0, 0, 167, 50)}
 local market_icon = {widget(0, 0, 38, 38)}
 local Market_goods = {Id = {21159}, strPictureName = {"icon.bmp"}}
@@ -67,7 +77,10 @@ assert(latest_bar == nil)
 bag_open = true
 app.tick()
 assert(latest_bar and #latest_bar.children == 6)
-assert(latest_bar.children[1].visible == 1)
+assert(latest_bar.visible == 0)
+SetMarketIsVisible(1)
+assert(latest_bar.visible == 1 and latest_bar.children[1].visible == 1)
+assert(latest_bar.children[6].visible == 1)
 assert(latest_bar.children[1].children[1].visible == 0)
 assert(#EquipArea.children == 1 and EquipArea.children[1].tip == 27829)
 market_equip[1].script[XE_DRAG]()
@@ -75,6 +88,20 @@ Market_pullPicXLUP(1)
 local saved = assert(io.open("external_lua/custom_quickbuy/heroes/101.txt", "r"))
 assert(saved:read("*l") == "1=21159")
 saved:close()
+SetMarketIsVisible(0)
+assert(latest_bar.children[1].visible == 1 and latest_bar.children[2].visible == 0)
+assert(latest_bar.children[1].x == 8)
+assert(latest_bar.children[1].script[XE_RBUP]() == nil)
+local still_saved = assert(io.open("external_lua/custom_quickbuy/heroes/101.txt", "r"))
+assert(still_saved:read("*l") == "1=21159")
+still_saved:close()
+SetMarketIsVisible(1)
+assert(latest_bar.children[1].script[XE_RBUP]() == nil)
+local cleared = assert(io.open("external_lua/custom_quickbuy/heroes/101.txt", "r"))
+assert(cleared:read("*l") == "1=0")
+cleared:close()
+assert(latest_bar.children[1].icon.visible == 0)
+assert(app.set_slot(1, 21159))
 cursor_x, cursor_y = 280, 35
 market_equip[1].script[XE_DRAG]()
 Market_pullPicXLUP(1)
@@ -95,6 +122,11 @@ local copy = assert(io.open("external_lua/custom_quickbuy/heroes/101.txt", "r"))
 assert(copy:read("*l") == "1=21159")
 copy:close()
 assert(restored.set_slot(2, 21057))
+SetMarketIsVisible(0)
+assert(latest_bar.children[1].visible == 1 and latest_bar.children[2].visible == 1)
+assert(latest_bar.children[3].visible == 0)
+assert(latest_bar.children[2].x == 52)
+assert(restored.set_slot(1, 21159))
 SendData_MarketGoods("item", "", "", "", "3000", 21159)
 FightBag_ReciveMoney("1000")
 assert(latest_bar ~= nil)
@@ -113,6 +145,15 @@ assert(#bought == 1)
 FightBag_ReciveMoney("3500")
 nextbuy.script[XE_LBUP]()
 assert(#bought == 2 and bought[2][1] == 21057 and bought[2][2] == 1)
+o_down = true
+restored.poll_hotkey()
+restored.poll_hotkey()
+assert(#bought == 3 and bought[3][1] == 21159)
+o_down = false
+restored.poll_hotkey()
+o_down = true
+restored.poll_hotkey()
+assert(#bought == 4 and bought[4][1] == 21159)
 SetGameStart_CurrentHeroId(102)
 local changed_hero = assert(io.open("external_lua/custom_quickbuy/last_hero.txt", "r"))
 assert(changed_hero:read("*l") == "102")

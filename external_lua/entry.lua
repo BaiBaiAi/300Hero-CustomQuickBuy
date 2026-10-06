@@ -17,5 +17,10 @@ end
 if g_setup_ui then
     local timer = g_setup_ui:SetTimer(0, 1000)
     timer.Timer = function() run() end
+    local key_timer = g_setup_ui:SetTimer(1, 50)
+    key_timer.Timer = function()
+        local good, failure = pcall(app.poll_hotkey)
+        if not good then app.log("hotkey: " .. tostring(failure)) end
+    end
 end
 run()

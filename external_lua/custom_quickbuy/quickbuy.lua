@@ -7,6 +7,7 @@ local money, queued, need, drag, portraitId
 local lastReconcile = 0
 local installed = {}
 local drag_sources = setmetatable({}, { __mode = "k" })
+local last_layout, o_was_down
 
 local function valid_id(value)
     local n = tonumber(value)
@@ -320,12 +321,65 @@ local function install_reconcile_hooks()
     end)
 end
 
+local function market_is_open()
+    if type(GetMarketIsVisible) == "function" then
+        local ok, value = pcall(GetMarketIsVisible)
+        if ok then return value == true or value == 1 end
+    end
+    if n_market_ui then
+        local ok, value = pcall(function() return n_market_ui:IsVisible() end)
+        if ok then return value == true or value == 1 end
+    end
+    return false
+end
+
+function M.clear_slot(index)
+    if not market_is_open() or not hero or index < 1 or index > 6 or not ids[index] then return false end
+    local previous = ids[index]
+    ids[index] = nil
+    if not save_hero() then ids[index] = previous return false end
+    M.refresh()
+    notify("第 " .. index .. " 格已清空")
+    return true
+end
+
+function M.layout()
+    if not bar then return end
+    local open = market_is_open()
+    local signature = tostring(open)
+    for i = 1, 6 do signature = signature .. ":" .. tostring(ids[i] or 0) end
+    if signature == last_layout then return end
+    last_layout = signature
+    local filled = 0
+    for i = 1, 6 do
+        local slot = slots[i]
+        if ids[i] then filled = filled + 1 end
+        if slot then
+            local show = open or ids[i] ~= nil
+            local position = open and (i - 1) or (filled - 1)
+            pcall(function()
+                slot:SetPosition(position * 44, 10)
+                slot:SetVisible(show and 1 or 0)
+            end)
+        end
+    end
+    pcall(function() bar:SetVisible((open or filled > 0) and 1 or 0) end)
+end
+
+local function install_visibility_hook()
+    wrap("SetMarketIsVisible", "marketvisibility", function(original, ...)
+        local result = original(...)
+        M.layout()
+        return result
+    end)
+end
+
 function M.refresh()
     for i = 1, 7 do
         local slot, id = slots[i], ids[i]
         if slot then
             pcall(function()
-                slot:SetVisible(1)
+                if i == 7 then slot:SetVisible(1) end
                 if slot.icon then slot.icon:SetVisible(id and 1 or 0) end
                 if id then
                     slot:SetImageTipWithItemId(id)
@@ -340,7 +394,30 @@ function M.refresh()
             end)
         end
     end
+    M.layout()
     M.refresh_gold()
+end
+
+local function buy_single()
+    local id = ids[7]
+    if not id then return end
+    if id == 27829 and money and money < 145 then
+        notify("金币不足，传送卷轴需要 145 金币")
+        return
+    end
+    buy(id)
+end
+
+function M.poll_hotkey()
+    local current = type(XGetMapId) == "function" and tonumber(XGetMapId()) or nil
+    if not hero or not current or current == 0 or current == 1 or type(XIsKeyDown) ~= "function" then
+        o_was_down = false
+        return
+    end
+    local ok, state = pcall(XIsKeyDown, 0x4F)
+    local down = ok and (state == true or (type(state) == "number" and state ~= 0))
+    if down and not o_was_down then buy_single() end
+    o_was_down = down
 end
 
 local function create_single_slot(parent)
@@ -358,17 +435,9 @@ local function create_single_slot(parent)
         if frame then frame:SetTouchEnabled(0) end
     end
     slot.icon = icon
-    local caption = slot:AddFont("P", 11, 8, -3, -22, 12, 12, 0xe3e38d)
+    local caption = slot:AddFont("O", 11, 8, -3, -22, 12, 12, 0xe3e38d)
     if caption then caption:SetTouchEnabled(0) end
-    slot.script[XE_LBUP] = function()
-        local id = ids[7]
-        if not id then return end
-        if id == 27829 and money and money < 145 then
-            notify("金币不足，传送卷轴需要 145 金币")
-            return
-        end
-        buy(id)
-    end
+    slot.script[XE_LBUP] = buy_single
     slots[7] = slot
     M.refresh()
     M.log("单购槽已加载，装备=" .. tostring(ids[7]))
@@ -384,14 +453,14 @@ local function create_bar()
     local ok, result = pcall(CreateWindow, parent.id, 8, -55, 326, 59)
     if not ok or not result then return end
     bar = result
-    bar:SetVisible(1)
+    bar:SetVisible(0)
+    last_layout = nil
     slots = {}
     for i = 1, 6 do
         local index = i
         local slot = bar:AddImage((path_fight or "../Data/UINEW/FIGHT/") .. "Me_equip.BMP", (i - 1) * 44, 10, 40, 40)
         if slot then
             slot:SetTouchEnabled(1)
-            if type(DisableRButtonClick) == "function" then pcall(DisableRButtonClick, slot.id) end
             local icon = slot:AddImage("", 0, 0, 40, 40)
             if icon then icon:SetTouchEnabled(0) icon:SetVisible(0) end
             slot.icon = icon
@@ -406,6 +475,7 @@ local function create_bar()
                 if owned[id] then notify("装备 " .. id .. " 已购买") return end
                 buy(id)
             end
+            slot.script[XE_RBUP] = function() M.clear_slot(index) end
             slots[i] = slot
         end
     end
@@ -436,6 +506,7 @@ function M.tick()
         map = current
         area, bar, nextbuy, gold_label, drag = nil, nil, nil, nil, nil
         money, queued, need, names, owned = nil, nil, nil, {}, {}
+        last_layout, o_was_down = nil, false
         slots = {}
     end
     if not current or current == 0 or current == 1 then return end
@@ -444,7 +515,9 @@ function M.tick()
     install_gold_hooks()
     install_name_hook()
     install_reconcile_hooks()
+    install_visibility_hook()
     create_bar()
+    M.layout()
     if os.time() - lastReconcile >= 10 then lastReconcile = os.time() reconcile() end
 end
 
