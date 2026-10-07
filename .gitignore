@@ -7,6 +7,6 @@ __pycache__/
 .pytest_cache/
 build/
 dist/*
-!dist/300Hero-QuickBuy-Installer.exe
+!dist/300Hero-QuickBuy-Installer-20261007.exe
 *.spec
 local_backups/
