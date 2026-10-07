@@ -1,4 +1,4 @@
-"""Version-locked 300Hero JMP bootstrap for the standalone quick-buy project.
+"""300Hero JMP bootstrap for the standalone quick-buy project.
 
 Only the setup.lua resource is changed. The original index record and compressed
 bytes are saved before writing so this patch can be restored without a full pack.
@@ -19,7 +19,6 @@ HEADER_SIZE = 54
 RECORD_SIZE = 304
 PATH_BYTES = 260
 RESOURCE = b"..\\data\\script\\gamehall\\setup\\setup.lua"
-SUPPORTED_MD5 = "587b12938b3227586c339963eeb0bcc8"
 MARKER = b"--CQB-BOOT"
 LOAD_LINE = b"    InitMain_Setup(g_setup_ui)\r\n"
 HOOK = (
@@ -44,19 +43,62 @@ class Resource:
     digest: str
 
 
+def _valid_nonstandard_index(stream, count: int, length: int) -> bool:
+    """Accept an unusual header only when its entire JMP index and samples verify."""
+    if not 0 < count <= 1_000_000:
+        return False
+    index_end = HEADER_SIZE + count * RECORD_SIZE
+    if index_end > length:
+        return False
+    samples = {0, count // 2, count - 1}
+    sample_records = []
+    stream.seek(HEADER_SIZE)
+    for index in range(count):
+        record = stream.read(RECORD_SIZE)
+        path = record[:PATH_BYTES].split(b"\0", 1)[0]
+        offset, packed, raw = struct.unpack_from("<III", record, PATH_BYTES)
+        digest = record[PATH_BYTES + 12:]
+        if (not path.replace(b"/", b"\\").startswith(b"..\\")
+                or packed == 0 or offset < index_end or offset + packed > length
+                or len(digest) != 32
+                or any(char not in b"0123456789abcdefABCDEF" for char in digest)):
+            return False
+        if index in samples:
+            sample_records.append((offset, packed, raw, digest.lower()))
+    for offset, packed, raw, digest in sample_records:
+        stream.seek(offset)
+        try:
+            source = zlib.decompress(stream.read(packed))
+        except zlib.error:
+            return False
+        if len(source) != raw or hashlib.md5(source).hexdigest().encode("ascii") != digest:
+            return False
+    return True
+
+
 def locate(game: Path) -> Resource:
     matches: list[Resource] = []
-    for pack in sorted(game.glob("Data*.jmp")):
+    packs = sorted(path for path in game.iterdir()
+                   if path.is_file() and path.suffix.lower() == ".jmp")
+    if not packs:
+        raise BootstrapError(f"No JMP files found in game directory: {game}")
+    for pack in packs:
         length = pack.stat().st_size
         if length < HEADER_SIZE:
             continue
         with pack.open("rb") as stream:
             header = stream.read(HEADER_SIZE)
-            if not (header.startswith(b"DATA1.0") or header.startswith(b"DATA2.0")):
+            if len(header) < HEADER_SIZE:
                 continue
             count = struct.unpack_from("<I", header, 50)[0]
             if HEADER_SIZE + count * RECORD_SIZE > length:
-                raise BootstrapError(f"Invalid JMP index size: {pack}")
+                if header.startswith((b"DATA1.0", b"DATA2.0")):
+                    raise BootstrapError(f"Invalid JMP index size: {pack}")
+                continue
+            if not header.startswith((b"DATA1.0", b"DATA2.0")):
+                if not _valid_nonstandard_index(stream, count, length):
+                    continue
+                stream.seek(HEADER_SIZE)
             for index in range(count):
                 record = stream.read(RECORD_SIZE)
                 path = record[:PATH_BYTES].split(b"\0", 1)[0]
@@ -69,7 +111,11 @@ def locate(game: Path) -> Resource:
                 matches.append(Resource(pack, index, HEADER_SIZE + index * RECORD_SIZE,
                                         offset, packed, raw, digest))
     if len(matches) != 1:
-        raise BootstrapError(f"Expected one setup.lua JMP resource, found {len(matches)}")
+        raise BootstrapError(
+            f"Expected one setup.lua JMP resource, found {len(matches)} in {game} "
+            f"({len(packs)} JMP files scanned). Check the selected game directory "
+            "and client version."
+        )
     return matches[0]
 
 
@@ -91,8 +137,6 @@ def patch_source(source: bytes) -> bytes:
         return source
     if b"--E" in source:
         raise BootstrapError("Another external Lua bootstrap is installed")
-    if hashlib.md5(source).hexdigest() != SUPPORTED_MD5:
-        raise BootstrapError("Unsupported client version: setup.lua MD5 changed")
     if source.count(LOAD_LINE) != 1:
         raise BootstrapError("setup.lua initialization anchor changed")
     # Remove complete-line comments only; keep block-comment bodies intact.

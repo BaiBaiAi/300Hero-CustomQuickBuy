@@ -16,14 +16,14 @@ def main() -> None:
     root.resizable(False, False)
     root.geometry("530x185")
 
-    folder = tk.StringVar(value=r"F:\JumpGame\300Hero")
-    tk.Label(root, text="游戏目录（包含 Data*.jmp）").pack(anchor="w", padx=15, pady=(15, 4))
+    folder = tk.StringVar()
+    tk.Label(root, text="游戏目录（包含 JMP 文件）").pack(anchor="w", padx=15, pady=(15, 4))
     path_row = tk.Frame(root)
     path_row.pack(fill="x", padx=15)
     tk.Entry(path_row, textvariable=folder).pack(side="left", fill="x", expand=True)
 
     def browse() -> None:
-        selected = filedialog.askdirectory(initialdir=folder.get())
+        selected = filedialog.askdirectory(initialdir=folder.get() or str(Path.home()))
         if selected:
             folder.set(selected)
 
@@ -32,6 +32,8 @@ def main() -> None:
     tk.Label(root, textvariable=result, anchor="w", wraplength=500).pack(fill="x", padx=15, pady=10)
 
     def game_dir() -> Path:
+        if not folder.get().strip():
+            raise ValueError("请先选择当前电脑的游戏目录。")
         path = Path(folder.get()).expanduser().resolve()
         if not path.is_dir():
             raise ValueError(f"游戏目录不存在：{path}")

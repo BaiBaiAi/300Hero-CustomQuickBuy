@@ -6,6 +6,7 @@ external_lua/custom_quickbuy/*.tmp
 __pycache__/
 .pytest_cache/
 build/
-dist/
+dist/*
+!dist/300Hero-QuickBuy-Installer.exe
 *.spec
 local_backups/
