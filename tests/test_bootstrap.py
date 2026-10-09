@@ -39,21 +39,25 @@ class BootstrapTests(unittest.TestCase):
             with self.assertRaises(bootstrap.BootstrapError):
                 bootstrap.locate(root)
             make_pack(root / "Data8.jmp", bootstrap.RESOURCE, source)
-            original_digest = bootstrap.SUPPORTED_MD5
-            try:
-                bootstrap.SUPPORTED_MD5 = hashlib.md5(source).hexdigest()
-                selected, before, after = bootstrap.plan(root)
-                self.assertEqual(selected.pack.name, "Data8.jmp")
-                self.assertIn(bootstrap.MARKER, after)
-                self.assertEqual(before, source)
-                backup_dir = root / "backup"
-                self.assertIn("installed", bootstrap.install(root, backup_dir))
-                self.assertEqual(bootstrap.install(root, backup_dir), "already installed")
-                self.assertIn(bootstrap.MARKER, bootstrap.read_resource(bootstrap.locate(root)))
-                bootstrap.restore(backup_dir / "setup_jmp.json")
-                self.assertEqual(bootstrap.read_resource(bootstrap.locate(root)), source)
-            finally:
-                bootstrap.SUPPORTED_MD5 = original_digest
+            selected, before, after = bootstrap.plan(root)
+            self.assertEqual(selected.pack.name, "Data8.jmp")
+            self.assertIn(bootstrap.MARKER, after)
+            self.assertEqual(before, source)
+            backup_dir = root / "backup"
+            self.assertIn("installed", bootstrap.install(root, backup_dir))
+            self.assertEqual(bootstrap.install(root, backup_dir), "already installed")
+            self.assertIn(bootstrap.MARKER, bootstrap.read_resource(bootstrap.locate(root)))
+            bootstrap.restore(backup_dir / "setup_jmp.json")
+            self.assertEqual(bootstrap.read_resource(bootstrap.locate(root)), source)
+
+    def test_unknown_md5_with_same_anchor_is_supported(self) -> None:
+        source = (b"-- client update\r\n" * 80 +
+                  b"function InitSetup_UI(wnd,bisopen)\r\n"
+                  b"    InitMain_Setup(g_setup_ui)\r\nend\r\n")
+        self.assertNotEqual(hashlib.md5(source).hexdigest(), "587b12938b3227586c339963eeb0bcc8")
+        self.assertIn(bootstrap.MARKER, bootstrap.patch_source(source))
+        with self.assertRaisesRegex(bootstrap.BootstrapError, "anchor"):
+            bootstrap.patch_source(b"function Other()\r\nend\r\n")
 
 
 if __name__ == "__main__":

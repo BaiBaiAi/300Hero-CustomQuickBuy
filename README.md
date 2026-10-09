@@ -16,7 +16,7 @@
 
 ## 安装
 
-本项目自带当前客户端版本的 JMP 启动引导。安装器按完整资源路径扫描游戏目录下的所有 `Data*.jmp`，只修改 `..\data\script\gamehall\setup\setup.lua`，不会修改 PVE 或 tiyan 路径。安装前会校验原资源 MD5；客户端更新后若版本不匹配，安装器会停止。
+本项目自带 JMP 启动引导。安装器按完整资源路径扫描游戏目录下的所有 `Data*.jmp`，只修改 `..\data\script\gamehall\setup\setup.lua`，不会修改 PVE 或 tiyan 路径。客户端更新后不按固定 MD5 限制版本，但仍校验 JMP 记录完整性、脚本插入点和压缩容量；结构不兼容时会停止。
 
 1. 关闭游戏。
 2. 在本项目目录运行 `python install.py "F:\JumpGame\300Hero"`，按实际游戏目录修改路径。
@@ -32,7 +32,7 @@ Windows 安装器 EXE 可通过 `python build_exe.py` 构建，输出位于 `dis
 
 EXE 中的“卸载并备份”会恢复安装前的 JMP 记录，把本项目脚本、角色配置和安装备份移到游戏目录旁边的 `300Hero_quickbuy_uninstall/<时间戳>/`。命令行也可运行 `python install.py "F:\JumpGame\300Hero" --uninstall`。卸载前同样需要退出游戏。
 
-如果游戏更新后校验失败，请更新本项目的版本适配后再安装；不要把旧版本清单 XML 覆盖到新客户端。
+如果游戏更新后脚本插入点或 JMP 格式改变，安装器会停止。此时需要适配新结构；不要把旧版本清单 XML 覆盖到新客户端。
 
 ## 工作原理与边界
 

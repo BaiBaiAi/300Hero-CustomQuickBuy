@@ -1,4 +1,4 @@
-"""Install quick-buy files and this project's version-locked JMP bootstrap."""
+"""Install quick-buy files and this project's structure-checked JMP bootstrap."""
 from __future__ import annotations
 
 import argparse
@@ -28,7 +28,7 @@ def require_closed_game() -> None:
 def deploy(game: Path) -> None:
     require_closed_game()
     # Validate the client and all source files before writing to the game.
-    resource, _, _ = bootstrap.plan(game)
+    resource, original_source, _ = bootstrap.plan(game)
     source_dir = Path(__file__).resolve().parent / "external_lua"
     entry_bytes = (source_dir / "entry.lua").read_bytes()
     addon_source = source_dir / "custom_quickbuy"
@@ -71,7 +71,7 @@ def deploy(game: Path) -> None:
                 target.unlink()
         raise
     print(f"Client setup.lua: {resource.pack.name} #{resource.index}")
-    print(f"Original MD5: {bootstrap.SUPPORTED_MD5}")
+    print(f"Original setup.lua MD5: {hashlib.md5(original_source).hexdigest()}")
     print(f"JMP bootstrap: {boot_status}")
     print(f"Quick-buy files: {addon_target}")
     print(f"Backup directory: {backup_dir}")

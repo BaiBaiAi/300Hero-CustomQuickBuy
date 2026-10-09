@@ -1,7 +1,6 @@
 """Installer and uninstaller round trip on a disposable JMP fixture."""
 from __future__ import annotations
 
-import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -23,8 +22,7 @@ class InstallTests(unittest.TestCase):
             old_entry = game / "external_lua" / "entry.lua"
             old_entry.parent.mkdir()
             old_entry.write_bytes(b"-- original game script\n")
-            with patch.object(bootstrap, "SUPPORTED_MD5", hashlib.md5(source).hexdigest()), \
-                    patch.object(install, "require_closed_game"):
+            with patch.object(install, "require_closed_game"):
                 install.deploy(game)
                 self.assertIn(bootstrap.MARKER, bootstrap.read_resource(bootstrap.locate(game)))
                 (game / "external_lua/custom_quickbuy/heroes/121.txt").write_text("1=21113\n")

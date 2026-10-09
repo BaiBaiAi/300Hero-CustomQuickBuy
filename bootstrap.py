@@ -1,4 +1,4 @@
-"""Version-locked 300Hero JMP bootstrap for the standalone quick-buy project.
+"""Structure-checked 300Hero JMP bootstrap for the standalone quick-buy project.
 
 Only the setup.lua resource is changed. The original index record and compressed
 bytes are saved before writing so this patch can be restored without a full pack.
@@ -19,7 +19,6 @@ HEADER_SIZE = 54
 RECORD_SIZE = 304
 PATH_BYTES = 260
 RESOURCE = b"..\\data\\script\\gamehall\\setup\\setup.lua"
-SUPPORTED_MD5 = "587b12938b3227586c339963eeb0bcc8"
 MARKER = b"--CQB-BOOT"
 LOAD_LINE = b"    InitMain_Setup(g_setup_ui)\r\n"
 HOOK = (
@@ -91,8 +90,6 @@ def patch_source(source: bytes) -> bytes:
         return source
     if b"--E" in source:
         raise BootstrapError("Another external Lua bootstrap is installed")
-    if hashlib.md5(source).hexdigest() != SUPPORTED_MD5:
-        raise BootstrapError("Unsupported client version: setup.lua MD5 changed")
     if source.count(LOAD_LINE) != 1:
         raise BootstrapError("setup.lua initialization anchor changed")
     # Remove complete-line comments only; keep block-comment bodies intact.
