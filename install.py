@@ -1,4 +1,4 @@
-"""Install quick-buy files and this project's structure-checked JMP bootstrap."""
+"""Install quick-buy files and this project's JMP bootstrap."""
 from __future__ import annotations
 
 import argparse
@@ -71,7 +71,7 @@ def deploy(game: Path) -> None:
                 target.unlink()
         raise
     print(f"Client setup.lua: {resource.pack.name} #{resource.index}")
-    print(f"Original setup.lua MD5: {hashlib.md5(original_source).hexdigest()}")
+    print(f"Original MD5: {hashlib.md5(original_source).hexdigest()}")
     print(f"JMP bootstrap: {boot_status}")
     print(f"Quick-buy files: {addon_target}")
     print(f"Backup directory: {backup_dir}")
@@ -140,7 +140,7 @@ def uninstall(game: Path) -> Path | None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="300Hero custom quick-buy installer")
-    parser.add_argument("game_dir", type=Path, help="directory containing Data*.jmp")
+    parser.add_argument("game_dir", type=Path, help="directory containing JMP files")
     parser.add_argument("--status", action="store_true", help="inspect bootstrap without writing")
     parser.add_argument("--uninstall", action="store_true", help="restore JMP and remove this add-on")
     parser.add_argument("--restore-jmp", type=Path, metavar="BACKUP",

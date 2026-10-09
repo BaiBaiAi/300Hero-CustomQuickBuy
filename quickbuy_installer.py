@@ -5,6 +5,7 @@ import hashlib
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox
+from tkinter.scrolledtext import ScrolledText
 
 import bootstrap
 import install
@@ -14,16 +15,16 @@ def main() -> None:
     root = tk.Tk()
     root.title("300Hero 自定义快捷购买安装器")
     root.resizable(False, False)
-    root.geometry("530x185")
+    root.geometry("530x215")
 
-    folder = tk.StringVar(value=r"F:\JumpGame\300Hero")
-    tk.Label(root, text="游戏目录（包含 Data*.jmp）").pack(anchor="w", padx=15, pady=(15, 4))
+    folder = tk.StringVar()
+    tk.Label(root, text="游戏目录（包含 JMP 文件）").pack(anchor="w", padx=15, pady=(15, 4))
     path_row = tk.Frame(root)
     path_row.pack(fill="x", padx=15)
     tk.Entry(path_row, textvariable=folder).pack(side="left", fill="x", expand=True)
 
     def browse() -> None:
-        selected = filedialog.askdirectory(initialdir=folder.get())
+        selected = filedialog.askdirectory(initialdir=folder.get() or str(Path.home()))
         if selected:
             folder.set(selected)
 
@@ -32,6 +33,8 @@ def main() -> None:
     tk.Label(root, textvariable=result, anchor="w", wraplength=500).pack(fill="x", padx=15, pady=10)
 
     def game_dir() -> Path:
+        if not folder.get().strip():
+            raise ValueError("请先选择当前电脑的游戏目录。")
         path = Path(folder.get()).expanduser().resolve()
         if not path.is_dir():
             raise ValueError(f"游戏目录不存在：{path}")
@@ -76,6 +79,17 @@ def main() -> None:
     tk.Button(actions, text="查看状态", width=15, command=status).pack(side="left", padx=6)
     tk.Button(actions, text="安装并验证", width=15, command=deploy).pack(side="left", padx=6)
     tk.Button(actions, text="卸载并备份", width=15, command=uninstall).pack(side="left", padx=6)
+
+    def show_license() -> None:
+        dialog = tk.Toplevel(root)
+        dialog.title("MIT 开源许可")
+        dialog.geometry("660x420")
+        notice = ScrolledText(dialog, wrap="word")
+        notice.pack(fill="both", expand=True, padx=10, pady=10)
+        notice.insert("1.0", (Path(__file__).resolve().parent / "LICENSE").read_text(encoding="utf-8"))
+        notice.configure(state="disabled")
+
+    tk.Button(root, text="查看 MIT 许可", command=show_license).pack(pady=(2, 8))
     root.mainloop()
 
 
