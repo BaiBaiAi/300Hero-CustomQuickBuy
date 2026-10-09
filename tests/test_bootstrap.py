@@ -79,6 +79,15 @@ class BootstrapTests(unittest.TestCase):
             bootstrap.restore(backup_dir / "setup_jmp.json")
             self.assertEqual(bootstrap.read_resource(bootstrap.locate(root)), source)
 
+    def test_unknown_md5_with_same_anchor_is_supported(self) -> None:
+        source = (b"-- client update\r\n" * 80 +
+                  b"function InitSetup_UI(wnd,bisopen)\r\n"
+                  b"    InitMain_Setup(g_setup_ui)\r\nend\r\n")
+        self.assertNotEqual(hashlib.md5(source).hexdigest(), "587b12938b3227586c339963eeb0bcc8")
+        self.assertIn(bootstrap.MARKER, bootstrap.patch_source(source))
+        with self.assertRaisesRegex(bootstrap.BootstrapError, "anchor"):
+            bootstrap.patch_source(b"function Other()\r\nend\r\n")
+
 
 if __name__ == "__main__":
     unittest.main()
